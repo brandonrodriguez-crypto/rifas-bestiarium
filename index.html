@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Rifas Bestiarium (demo)</title>
+<title>Rifas Bestiarium</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&display=swap" rel="stylesheet">
@@ -189,9 +189,13 @@ td .btn{padding:6px 10px;min-height:34px;font-size:13px}
 .login{max-width:380px;margin:60px auto}
 .toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--sel);color:#fff;padding:10px 18px;border-radius:10px;font-weight:700;z-index:50}
 .switch{display:flex;gap:10px;align-items:center;font-weight:600}
+.toast.bad{background:var(--sold)}
+.setup{max-width:640px;margin:60px auto}
+.setup code{background:var(--bg);padding:2px 6px;border-radius:6px}
+.loading{padding:80px 20px;text-align:center;color:var(--muted)}
 </style>
-</head>
-<body>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+</head><body>
 <header>
   <div class="wrap">
     <a class="brand" href="#inicio">Rifas <span>Bestiarium</span></a>
@@ -209,8 +213,17 @@ td .btn{padding:6px 10px;min-height:34px;font-size:13px}
   </div>
 </header>
 
+<div class="loading" id="loading">Cargando sorteo…</div>
+
+<div class="wrap" id="setup" hidden>
+  <div class="setup panel">
+    <h2 style="font-size:26px">Falta conectar Supabase</h2>
+    <p class="lead" id="setupMsg">Abre <code>index.html</code>, busca <code>SUPABASE_URL</code> y <code>SUPABASE_ANON_KEY</code> al inicio del script y pega los valores de tu proyecto (Supabase &gt; Project Settings &gt; API).</p>
+  </div>
+</div>
+
 <!-- ================= SITIO PÚBLICO ================= -->
-<main id="pub">
+<main id="pub" hidden>
   <div class="wrap hero">
     <div class="paused" id="pausedMsg" hidden>La venta de boletos está pausada por el momento.</div>
     <article class="ticket" aria-label="Premio del sorteo">
@@ -305,7 +318,7 @@ td .btn{padding:6px 10px;min-height:34px;font-size:13px}
 
   <footer>
     <div class="wrap">
-      <div>Rifas Bestiarium, Monterrey, N.L.<br><span id="fPermit"></span><br>Sitio demo, sin operaciones reales.</div>
+      <div>Rifas Bestiarium, Monterrey, N.L.<br><span id="fPermit"></span></div>
       <div><a href="#admin">Acceso organizador</a></div>
     </div>
   </footer>
@@ -326,23 +339,21 @@ td .btn{padding:6px 10px;min-height:34px;font-size:13px}
   <div class="wrap">
     <div class="login panel" id="login">
       <h2 style="font-size:26px">Acceso organizador</h2>
-      <p class="lead" style="margin-bottom:14px">PIN de la demo: 1234</p>
-      <div class="field"><label for="pin">PIN</label><input type="password" id="pin" inputmode="numeric" maxlength="4"></div>
-      <p class="err" id="pinErr"></p>
-      <button class="btn btn-ink" id="pinBtn" style="width:100%">Entrar</button>
+      <div class="field"><label for="lEmail">Correo</label><input type="text" id="lEmail" autocomplete="username" inputmode="email"></div>
+      <div class="field"><label for="lPass">Contraseña</label><input type="password" id="lPass" autocomplete="current-password"></div>
+      <p class="err" id="lErr"></p>
+      <button class="btn btn-ink" id="lBtn" style="width:100%">Entrar</button>
     </div>
 
     <div class="adm" id="admBody" hidden>
-      <aside role="tablist" aria-label="Secciones del panel">
+      <aside aria-label="Secciones del panel">
         <button data-tab="resumen" aria-current="true">Resumen</button>
         <button data-tab="sorteo">Sorteo</button>
         <button data-tab="fotos">Fotos del premio</button>
         <button data-tab="pagos">Pagos y apartados</button>
         <button data-tab="cobro">Datos de cobro</button>
       </aside>
-
       <div>
-        <!-- Resumen -->
         <div data-pane="resumen">
           <h2>Resumen del sorteo</h2>
           <p class="lead" id="rLead"></p>
@@ -358,10 +369,9 @@ td .btn{padding:6px 10px;min-height:34px;font-size:13px}
           </div>
         </div>
 
-        <!-- Sorteo -->
         <div data-pane="sorteo" hidden>
           <h2>Datos del sorteo</h2>
-          <p class="lead">Lo que cambies aquí se refleja de inmediato en el sitio público.</p>
+          <p class="lead">Lo que guardes aquí se publica de inmediato en el sitio.</p>
           <div class="panel">
             <div class="fgrid">
               <div class="field full"><label class="switch"><input type="checkbox" id="cActive"> Venta de boletos activa</label><small>Si la pausas, el sitio sigue visible pero nadie puede apartar.</small></div>
@@ -370,49 +380,45 @@ td .btn{padding:6px 10px;min-height:34px;font-size:13px}
               <div class="field full"><label for="cPrize">Premio principal</label><input type="text" id="cPrize" maxlength="70"></div>
               <div class="field full"><label for="cDesc">Descripción del premio</label><textarea id="cDesc" maxlength="320"></textarea></div>
               <div class="field full"><label for="cSecond">Premios adicionales</label><input type="text" id="cSecond" maxlength="120" placeholder="Ej. Segundo premio: $25,000 en efectivo"></div>
-              <div class="field"><label for="cPrice">Precio por boleto (MXN)</label><input type="number" id="cPrice" min="1" step="1"></div>
+              <div class="field"><label for="cPrice">Precio por boleto (MXN)</label><input type="number" id="cPrice" min="1" step="1"><small>Los apartados existentes conservan el precio con el que se hicieron.</small></div>
               <div class="field"><label for="cTotal">Cantidad de boletos</label><input type="number" id="cTotal" min="100" max="100000" step="100"><small id="cTotalHelp"></small></div>
               <div class="field"><label for="cOpp">Oportunidades por boleto</label><select id="cOpp"><option value="1">1 (solo el número)</option><option value="2">2</option><option value="3">3</option><option value="4">4</option></select></div>
               <div class="field"><label for="cHold">Horas para pagar un apartado</label><input type="number" id="cHold" min="1" max="72"></div>
               <div class="field full"><label for="cPermit">Número de permiso SEGOB</label><input type="text" id="cPermit" maxlength="40"></div>
-              <div class="field full"><label class="switch"><input type="checkbox" id="cDemo"> Mostrar ventas de ejemplo</label><small>Simula boletos vendidos para la demo. Apágalo para ver solo tus apartados reales.</small></div>
             </div>
             <p class="err" id="cErr"></p>
             <div class="row"><button class="btn btn-gold" id="cSave">Guardar cambios</button></div>
           </div>
         </div>
 
-        <!-- Fotos -->
         <div data-pane="fotos" hidden>
           <h2>Fotos del premio</h2>
           <p class="lead">Hasta 6 fotos. La primera es la principal en el sitio. Se ajustan automáticamente de tamaño.</p>
           <label class="drop panel" for="fileIn">
-            <b>Subir fotos</b><br><span style="color:var(--muted)">JPG o PNG desde tu computadora o celular</span>
+            <b>Subir fotos</b><br><span style="color:var(--muted)" id="dropTxt">JPG o PNG desde tu computadora o celular</span>
             <input type="file" id="fileIn" accept="image/*" multiple hidden>
           </label>
           <p class="err" id="fErr" style="margin-top:8px"></p>
           <div class="photos" id="photos"></div>
         </div>
 
-        <!-- Pagos -->
         <div data-pane="pagos" hidden>
           <h2>Pagos y apartados</h2>
-          <p class="lead">Valida comprobantes, marca pagos y libera apartados.</p>
+          <p class="lead">Valida comprobantes, marca pagos y libera apartados. Los apartados vencidos se eliminan solos.</p>
           <div class="panel">
             <div class="toolbar" style="margin-top:0">
               <div class="verify" style="flex:1 1 260px"><input type="text" id="pQ" placeholder="Buscar por folio, nombre, WhatsApp o boleto" aria-label="Buscar apartados"></div>
               <select id="pF" style="width:auto"><option value="all">Todos</option><option value="apartado">Pendientes de pago</option><option value="pagado">Pagados</option></select>
+              <button class="btn btn-line" id="pRefresh">Actualizar</button>
             </div>
             <div class="tablewrap"><table>
               <thead><tr><th>Folio</th><th>Fecha</th><th>Nombre</th><th>WhatsApp</th><th>Estado</th><th>Boletos</th><th>Total</th><th>Vence</th><th>Acciones</th></tr></thead>
               <tbody id="rows"></tbody>
             </table></div>
-            <p class="lead" id="emptyRows" style="margin:14px 0 0">No hay apartados que coincidan. Los apartados del sitio público aparecen aquí.</p>
+            <p class="lead" id="emptyRows" style="margin:14px 0 0">No hay apartados que coincidan.</p>
           </div>
-          <div class="row" style="justify-content:flex-start;margin-top:14px"><button class="btn btn-red" id="resetDemo">Borrar todos los apartados de la demo</button></div>
         </div>
 
-        <!-- Cobro -->
         <div data-pane="cobro" hidden>
           <h2>Datos de cobro</h2>
           <p class="lead">Se muestran al comprador después de apartar.</p>
@@ -436,82 +442,74 @@ td .btn{padding:6px 10px;min-height:34px;font-size:13px}
 <div class="toast" id="toast" hidden></div>
 
 <script>
-(function(){
-  const K_CFG='rifa-cfg-v2',K_RES='rifa-res-v2',K_PH='rifa-fotos-v2',PAGE=500;
-  const DEF={active:true,num:14,date:'2026-12-12T20:00',prize:'Pickup 4x4 doble cabina 2026',
-    desc:'Cero kilómetros, con placas y tenencia pagadas. El sorteo se transmite en vivo con base en la Lotería Nacional.',
-    second:'Segundo premio: $25,000 en efectivo',price:50,total:10000,opp:3,hold:12,permit:'[número de permiso]',demo:true,
-    bank:'[Banco]',clabe:'0000 0000 0000 0000 00',owner:'[Razón social]',wa:'8100000000'};
-  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const $=id=>document.getElementById(id);
-  const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  const money=n=>'$'+Math.round(n).toLocaleString('es-MX')+' MXN';
-  const get=(k,d)=>{try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(e){return d}};
-  const put=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v));return true}catch(e){return false}};
+/* ===== CONFIGURA AQUÍ TU PROYECTO (Supabase > Project Settings > API) ===== */
+const SUPABASE_URL = 'https://wlmckzjjyrqdktssvroc.supabase.co/rest/v1/;
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndsbWNrempqeXJxZGt0c3N2cm9jIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTMwNTE2MTEsImV4cCI6MjEwODYyNzYxMX0.JblXnVAzSsyxX4ofk4Inn9vI1IcIZcoqSv-1X-9R9vk';
+/* ========================================================================== */
 
-  let cfg=Object.assign({},DEF,get(K_CFG,{}));
-  let res=get(K_RES,[]);
-  let photos=get(K_PH,[]);
-  let seeded=new Set(), resMap=new Map();
-  const selected=new Set();
-  let page=0,flashNum=null,photoIdx=0;
+(function(){
+  const BUCKET='premio', PAGE=500, BRAND='Rifas Bestiarium';
+  const $=id=>document.getElementById(id);
+  const configured=!SUPABASE_URL.includes('TU-PROYECTO')&&!SUPABASE_ANON_KEY.includes('TU-ANON');
+  if(!configured||!window.supabase){$('loading').hidden=true;$('setup').hidden=false;
+    if(configured)$('setupMsg').textContent='No se pudo cargar la librería de Supabase. Revisa tu conexión a internet.';return}
+  const sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
+
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const money=n=>'$'+Math.round(n).toLocaleString('es-MX')+' MXN';
+  const toLocalInput=iso=>{const d=new Date(iso);if(isNaN(d))return'';const z=n=>String(n).padStart(2,'0');return `${d.getFullYear()}-${z(d.getMonth()+1)}-${z(d.getDate())}T${z(d.getHours())}:${z(d.getMinutes())}`};
+
+  let cfg=null, paid=new Set(), held=new Set(), resv=[], isAdmin=false;
+  const selected=new Set(); let page=0,flashNum=null,photoIdx=0;
 
   const W=()=>Math.max(3,String(cfg.total-1).length);
   const pad=(n,l)=>String(n).padStart(l||W(),'0');
   const OW=()=>String(cfg.total*cfg.opp-1).length;
   const opps=n=>Array.from({length:cfg.opp},(_,k)=>k===0?pad(n):pad(n+k*cfg.total,OW()));
 
-  function seed(){
-    seeded=new Set(); if(!cfg.demo)return;
-    let a=2026; const r=()=>{a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296};
-    for(let i=0;i<cfg.total;i++) if(r()<0.37) seeded.add(i);
-  }
-  function rebuild(){
-    const now=Date.now(),n=res.length;
-    res=res.filter(r=>r.status!=='apartado'||now-r.created<cfg.hold*3600e3);
-    if(res.length!==n)put(K_RES,res);
-    resMap=new Map(); res.forEach(r=>r.tickets.forEach(t=>resMap.set(t,r)));
-  }
-  function statusOf(n){
-    const r=resMap.get(n); if(r)return r.status==='pagado'?'sold':'held';
-    if(seeded.has(n))return 'sold'; if(selected.has(n))return 'sel'; return 'free';
-  }
-  function stats(){
-    let paid=0,held=0; res.forEach(r=>{if(r.status==='pagado')paid+=r.tickets.length;else held+=r.tickets.length});
-    const demo=seeded.size;
-    return {paid,held,demo,sold:paid+demo,free:cfg.total-paid-held-demo};
-  }
-  function toast(t){const e=$('toast');e.textContent=t;e.hidden=false;clearTimeout(e._t);e._t=setTimeout(()=>e.hidden=true,2200)}
+  function toast(t,bad){const e=$('toast');e.textContent=t;e.classList.toggle('bad',!!bad);e.hidden=false;clearTimeout(e._t);e._t=setTimeout(()=>e.hidden=true,2600)}
 
-  /* ---------- PUBLIC ---------- */
+  async function loadConfig(){
+    const {data,error}=await sb.from('config').select('*').eq('id',1).single();
+    if(error)throw error; cfg=data; cfg.price=+cfg.price; cfg.photos=cfg.photos||[];
+  }
+  async function loadTaken(){
+    const {data,error}=await sb.rpc('get_taken'); if(error)throw error;
+    paid=new Set(data.paid||[]); held=new Set(data.held||[]);
+    [...selected].forEach(n=>{if(paid.has(n)||held.has(n))selected.delete(n)});
+  }
+  function maxTaken(){let m=-1;paid.forEach(n=>{if(n>m)m=n});held.forEach(n=>{if(n>m)m=n});return m}
+  function statusOf(n){if(paid.has(n))return'sold';if(held.has(n))return'held';if(selected.has(n))return'sel';return'free'}
+
+  /* ---------- PÚBLICO ---------- */
   function renderHero(){
-    const d=new Date(cfg.date);
-    const fecha=isNaN(d)?'fecha por definir':d.toLocaleDateString('es-MX',{day:'numeric',month:'long',year:'numeric'});
-    $('hKicker').textContent=`Sorteo número ${cfg.num}, se juega el ${fecha}`;
+    const d=new Date(cfg.draw_at);
+    $('hKicker').textContent=`Sorteo número ${cfg.num}, se juega el ${isNaN(d)?'fecha por definir':d.toLocaleDateString('es-MX',{day:'numeric',month:'long',year:'numeric'})}`;
     $('hPrize').textContent=cfg.prize;
-    $('hDesc').textContent=cfg.desc+(cfg.second?' '+cfg.second+'.':'');
+    $('hDesc').textContent=cfg.descr+(cfg.second?' '+cfg.second+'.':'');
     $('hPrice').textContent=money(cfg.price);
     $('hOpp').textContent=cfg.opp>1?`Cada boleto incluye ${cfg.opp} oportunidades`:'Un número por boleto';
-    $('hPermit').textContent=$('fPermit').textContent='Permiso SEGOB: '+cfg.permit;
-    $('bLead').textContent=`Toca los números que quieras o deja que la maquinita los elija por ti. Los apartados se liberan si no se pagan en ${cfg.hold} horas.`;
+    $('hPermit').textContent=$('fPermit').textContent='Permiso SEGOB: '+(cfg.permit||'en trámite');
+    $('bLead').textContent=`Toca los números que quieras o deja que la maquinita los elija por ti. Los apartados se liberan si no se pagan en ${cfg.hold_hours} horas.`;
     $('faqOpp').textContent=cfg.opp>1?`Cada boleto incluye ${cfg.opp-1} número${cfg.opp>2?'s':''} adicional${cfg.opp>2?'es':''} que también participa${cfg.opp>2?'n':''}. Si compras el ${pad(123)}, también juegas con el ${opps(123).slice(1).join(' y el ')}.`:'En este sorteo cada boleto participa con un solo número.';
-    $('faqHold').textContent=`Los boletos apartados se liberan automáticamente a las ${cfg.hold} horas y vuelven a estar disponibles.`;
+    $('faqHold').textContent=`Los boletos apartados se liberan automáticamente a las ${cfg.hold_hours} horas y vuelven a estar disponibles.`;
     $('pausedMsg').hidden=cfg.active;
     $('find').maxLength=W();$('find').placeholder=`Busca un número, ej. ${pad(777%cfg.total)}`;
-    if(photos.length){
-      if(photoIdx>=photos.length)photoIdx=0;
-      $('hMedia').innerHTML=`<div class="gallery"><img class="big" src="${photos[photoIdx]}" alt="Foto ${photoIdx+1} del premio">${photos.length>1?`<div class="thumbs">${photos.map((p,i)=>`<button data-ph="${i}" aria-current="${i===photoIdx}" aria-label="Ver foto ${i+1}"><img src="${p}" alt=""></button>`).join('')}</div>`:''}</div>`;
+    const ph=cfg.photos;
+    if(ph.length){
+      if(photoIdx>=ph.length)photoIdx=0;
+      $('hMedia').innerHTML=`<div class="gallery"><img class="big" src="${esc(ph[photoIdx])}" alt="Foto ${photoIdx+1} del premio">${ph.length>1?`<div class="thumbs">${ph.map((p,i)=>`<button data-ph="${i}" aria-current="${i===photoIdx}" aria-label="Ver foto ${i+1}"><img src="${esc(p)}" alt=""></button>`).join('')}</div>`:''}</div>`;
     }else{
       $('hMedia').innerHTML=`<svg class="truck" viewBox="0 0 520 190" role="img" aria-label="Ilustración de una camioneta"><path d="M20 128 L40 98 L150 94 L196 46 L318 44 L350 94 L490 98 L502 112 L502 138 L20 138 Z" fill="#14213D"/><path d="M206 58 L304 56 L328 92 L176 94 Z" fill="#FFC93C" opacity=".55"/><line x1="256" y1="57" x2="254" y2="93" stroke="#14213D" stroke-width="5"/><rect x="350" y="80" width="140" height="8" rx="3" fill="#FFC93C" opacity=".7"/><rect x="486" y="104" width="16" height="10" rx="2" fill="#FFC93C"/><rect x="20" y="106" width="14" height="10" rx="2" fill="#C8322B"/><g fill="#14213D"><circle cx="112" cy="140" r="34"/><circle cx="410" cy="140" r="34"/></g><g fill="#FFC93C"><circle cx="112" cy="140" r="15"/><circle cx="410" cy="140" r="15"/></g></svg>`;
     }
-    const s=stats(),pct=Math.round((s.sold+s.held)/cfg.total*100);
-    $('pct').textContent=pct+'%';$('bar').style.width=pct+'%';
+    renderProgress();
   }
+  function renderProgress(){const pct=Math.round((paid.size+held.size)/cfg.total*100);$('pct').textContent=pct+'%';$('bar').style.width=pct+'%'}
   $('hMedia').addEventListener('click',e=>{const b=e.target.closest('[data-ph]');if(b){photoIdx=+b.dataset.ph;renderHero()}});
 
   function renderPages(){
-    const n=Math.ceil(cfg.total/PAGE); if(page>=n)page=0;
-    $('pages').hidden=n<2;
+    const n=Math.ceil(cfg.total/PAGE);if(page>=n)page=0;$('pages').hidden=n<2;
     let h='';for(let p=0;p<n;p++)h+=`<button data-p="${p}" aria-current="${p===page}">${pad(p*PAGE)}–${pad(Math.min(cfg.total,p*PAGE+PAGE)-1)}</button>`;
     $('pages').innerHTML=h;
   }
@@ -527,8 +525,7 @@ td .btn{padding:6px 10px;min-height:34px;font-size:13px}
   }
   $('grid').addEventListener('click',e=>{
     const b=e.target.closest('.cell');if(!b)return;const n=+b.dataset.n,s=statusOf(n);
-    if(s==='sold'||s==='held')return;
-    if(!cfg.active){toast('La venta está pausada');return}
+    if(s==='sold'||s==='held')return;if(!cfg.active){toast('La venta está pausada',1);return}
     selected.has(n)?selected.delete(n):selected.add(n);flashNum=null;renderGrid();updateCart();
   });
   $('onlyFree').addEventListener('change',renderGrid);
@@ -540,9 +537,8 @@ td .btn{padding:6px 10px;min-height:34px;font-size:13px}
   $('findBtn').addEventListener('click',find);$('find').addEventListener('keydown',e=>{if(e.key==='Enter')find()});
 
   $('spin').addEventListener('click',()=>{
-    if(!cfg.active){toast('La venta está pausada');return}
-    const q=+$('qty').value,pool=[];
-    for(let n=0;n<cfg.total;n++)if(statusOf(n)==='free')pool.push(n);
+    if(!cfg.active){toast('La venta está pausada',1);return}
+    const q=+$('qty').value,pool=[];for(let n=0;n<cfg.total;n++)if(statusOf(n)==='free')pool.push(n);
     if(!pool.length){$('reel').textContent='Agotado';return}
     const picks=[];for(let i=0;i<Math.min(q,pool.length);i++){const j=i+Math.floor(Math.random()*(pool.length-i));[pool[i],pool[j]]=[pool[j],pool[i]];picks.push(pool[i])}
     const btn=$('spin');btn.disabled=true;
@@ -552,192 +548,242 @@ td .btn{padding:6px 10px;min-height:34px;font-size:13px}
     let t=0;const iv=setInterval(()=>{$('reel').textContent=pad(Math.floor(Math.random()*cfg.total));if(++t>18){clearInterval(iv);finish()}},50);
   });
 
-  function updateCart(){
-    const c=selected.size;$('cartbar').classList.toggle('show',c>0);
-    $('cartCount').textContent=c+(c===1?' boleto':' boletos');$('cartTotal').textContent=money(c*cfg.price);
-  }
+  function updateCart(){const c=selected.size;$('cartbar').classList.toggle('show',c>0);
+    $('cartCount').textContent=c+(c===1?' boleto':' boletos');$('cartTotal').textContent=money(c*cfg.price)}
   $('clearSel').addEventListener('click',()=>{selected.clear();renderGrid();updateCart()});
 
   const dlg=$('dlg');
   function checkoutView(){
     const list=[...selected].sort((a,b)=>a-b);
-    $('dlgBody').innerHTML=`<h3>Apartar boletos</h3><p class="lead" style="margin:0">Tienes ${cfg.hold} horas para pagar después de apartar.</p>
+    $('dlgBody').innerHTML=`<h3>Apartar boletos</h3><p class="lead" style="margin:0">Tienes ${cfg.hold_hours} horas para pagar después de apartar. Máximo 100 boletos por folio.</p>
       <div class="chips">${list.map(n=>`<span class="chip">${pad(n)}<button data-rm="${n}" aria-label="Quitar ${pad(n)}">×</button></span>`).join('')}</div>
-      <div class="field"><label for="fName">Nombre completo</label><input type="text" id="fName" autocomplete="name"></div>
+      <div class="field"><label for="fName">Nombre completo</label><input type="text" id="fName" autocomplete="name" maxlength="80"></div>
       <div class="field"><label for="fPhone">WhatsApp a 10 dígitos</label><input type="tel" id="fPhone" inputmode="numeric" maxlength="10" autocomplete="tel-national"></div>
       <div class="field"><label for="fState">Estado</label><select id="fState"><option>Nuevo León</option><option>Coahuila</option><option>Tamaulipas</option><option>Chihuahua</option><option>Jalisco</option><option>Ciudad de México</option><option>Otro</option></select></div>
       <p class="err" id="fErr2"></p>
       <div class="total"><span>${list.length} boleto${list.length===1?'':'s'}${cfg.opp>1?` con ${list.length*cfg.opp} oportunidades`:''}</span><b>${money(list.length*cfg.price)}</b></div>
       <div class="row"><button class="btn btn-line" id="dCancel">Seguir eligiendo</button><button class="btn btn-gold" id="dHold">Apartar boletos</button></div>`;
   }
-  $('openCheckout').addEventListener('click',()=>{if(!cfg.active){toast('La venta está pausada');return}checkoutView();dlg.showModal()});
-  $('dlgBody').addEventListener('click',e=>{
+  $('openCheckout').addEventListener('click',()=>{if(!cfg.active){toast('La venta está pausada',1);return}checkoutView();dlg.showModal()});
+  $('dlgBody').addEventListener('click',async e=>{
     const rm=e.target.closest('[data-rm]');
     if(rm){selected.delete(+rm.dataset.rm);renderGrid();updateCart();if(!selected.size){dlg.close();return}
       const k={n:$('fName').value,p:$('fPhone').value};checkoutView();$('fName').value=k.n;$('fPhone').value=k.p;return}
     if(e.target.id==='dCancel'||e.target.id==='dClose'){dlg.close();return}
-    if(e.target.id==='dHold'){
-      const name=$('fName').value.trim(),phone=$('fPhone').value.replace(/\D/g,''),st=$('fState').value;
-      if(name.length<3){$('fErr2').textContent='Escribe tu nombre completo.';return}
-      if(phone.length!==10){$('fErr2').textContent='El WhatsApp debe tener 10 dígitos.';return}
-      const tickets=[...selected].filter(n=>statusOf(n)==='sel').sort((a,b)=>a-b);
-      if(!tickets.length){$('fErr2').textContent='Tus boletos ya no están disponibles. Elige otros.';return}
-      const r={folio:'RB-'+Math.random().toString(36).slice(2,7).toUpperCase(),name,phone,state:st,tickets,status:'apartado',created:Date.now(),price:cfg.price};
-      res.push(r);put(K_RES,res);selected.clear();rebuild();renderGrid();updateCart();renderHero();confirmView(r);
+    if(e.target.id!=='dHold')return;
+    const name=$('fName').value.trim(),phone=$('fPhone').value.replace(/\D/g,''),st=$('fState').value;
+    if(name.length<3){$('fErr2').textContent='Escribe tu nombre completo.';return}
+    if(phone.length!==10){$('fErr2').textContent='El WhatsApp debe tener 10 dígitos.';return}
+    const tickets=[...selected].sort((a,b)=>a-b);
+    if(tickets.length>100){$('fErr2').textContent='Máximo 100 boletos por folio.';return}
+    const btn=e.target;btn.disabled=true;btn.textContent='Apartando…';
+    const {data,error}=await sb.rpc('reserve',{p_name:name,p_phone:phone,p_state:st,p_numbers:tickets});
+    btn.disabled=false;btn.textContent='Apartar boletos';
+    if(error){
+      const m=error.message||'';
+      if(m.includes('NO_DISPONIBLE')){
+        try{await loadTaken()}catch(x){}renderGrid();updateCart();renderProgress();
+        if(!selected.size){dlg.close();toast('Esos boletos acaban de ser apartados. Elige otros.',1);return}
+        const k={n:$('fName').value,p:$('fPhone').value};checkoutView();$('fName').value=k.n;$('fPhone').value=k.p;
+        $('fErr2').textContent='Algunos boletos acaban de ser apartados por otra persona. Los quitamos de tu lista.';return;
+      }
+      $('fErr2').textContent=m.includes('VENTA_PAUSADA')?'La venta está pausada.':m.includes('LIMITE_APARTADOS')?'Ya tienes 3 apartados pendientes con este WhatsApp. Paga alguno antes de apartar más.':'No se pudo apartar. Revisa tu conexión e inténtalo de nuevo.';
+      return;
     }
+    const r={folio:data.folio,name,tickets,price:+data.price,created:new Date(data.created_at).getTime()};
+    selected.clear();try{await loadTaken()}catch(x){}renderGrid();updateCart();renderProgress();confirmView(r);
   });
   dlg.addEventListener('click',e=>{if(e.target===dlg)dlg.close()});
   function confirmView(r){
     const total=r.tickets.length*r.price;
-    const dl=new Date(r.created+cfg.hold*3600e3).toLocaleString('es-MX',{dateStyle:'medium',timeStyle:'short'});
+    const dl=new Date(r.created+cfg.hold_hours*3600e3).toLocaleString('es-MX',{dateStyle:'medium',timeStyle:'short'});
     const msg=`Hola, aparté boletos para el sorteo ${cfg.num}.\nFolio: ${r.folio}\nNombre: ${r.name}\nBoletos: ${r.tickets.map(n=>pad(n)).join(', ')}\nTotal: ${money(total)}\nAdjunto mi comprobante.`;
-    $('dlgBody').innerHTML=`<h3>Boletos apartados</h3><p class="lead" style="margin:0">Folio <b class="mono">${r.folio}</b>. Paga antes del ${dl}.</p>
+    $('dlgBody').innerHTML=`<h3>Boletos apartados</h3><p class="lead" style="margin:0">Folio <b class="mono">${esc(r.folio)}</b>. Paga antes del ${dl}.</p>
       <div class="chips">${r.tickets.map(n=>`<span class="chip">${pad(n)}</span>`).join('')}</div>
-      <dl class="bank"><dt>Banco</dt><dd>${esc(cfg.bank)}</dd><dt>CLABE</dt><dd class="mono">${esc(cfg.clabe)}</dd><dt>Titular</dt><dd>${esc(cfg.owner)}</dd><dt>Concepto</dt><dd class="mono">${r.folio}</dd><dt>Total a pagar</dt><dd>${money(total)}</dd></dl>
+      <dl class="bank"><dt>Banco</dt><dd>${esc(cfg.bank)}</dd><dt>CLABE</dt><dd class="mono">${esc(cfg.clabe)}</dd><dt>Titular</dt><dd>${esc(cfg.owner)}</dd><dt>Concepto</dt><dd class="mono">${esc(r.folio)}</dd><dt>Total a pagar</dt><dd>${money(total)}</dd></dl>
       <div class="row"><button class="btn btn-line" id="dClose">Cerrar</button><a class="btn wa" target="_blank" rel="noopener" href="https://wa.me/52${esc(cfg.wa)}?text=${encodeURIComponent(msg)}">Enviar comprobante por WhatsApp</a></div>`;
   }
 
   const tagFor=s=>({ok:'<span class="tag t-ok">Pagado</span>',held:'<span class="tag t-held">Apartado, pendiente de pago</span>',sold:'<span class="tag t-sold">Vendido</span>',free:'<span class="tag t-free">Disponible</span>'}[s]);
-  function verify(){
+  async function verify(){
     const v=$('vq').value.replace(/\D/g,''),out=$('vRes');
     if(!v){out.innerHTML='<p class="lead">Escribe un número de boleto o un WhatsApp.</p>';return}
+    out.innerHTML='<p class="lead">Buscando…</p>';
     if(v.length===10){
-      const mine=res.filter(r=>r.phone===v);
-      out.innerHTML=mine.length?mine.map(r=>`<div class="rcard"><b class="mono">${r.folio}</b> ${tagFor(r.status==='pagado'?'ok':'held')}<br>${esc(r.name)}<div class="chips">${r.tickets.map(n=>`<span class="chip">${pad(n)}</span>`).join('')}</div></div>`).join(''):'<p class="lead">No hay boletos apartados con ese WhatsApp. Revisa el número o aparta boletos.</p>';
+      const {data,error}=await sb.rpc('verify_phone',{p_phone:v});
+      if(error){out.innerHTML='<p class="lead">No se pudo consultar. Inténtalo de nuevo.</p>';return}
+      out.innerHTML=data.length?data.map(r=>`<div class="rcard"><b class="mono">${esc(r.folio)}</b> ${tagFor(r.status==='pagado'?'ok':'held')}<br>${esc(r.first_name)}<div class="chips">${r.numeros.map(n=>`<span class="chip">${pad(n)}</span>`).join('')}</div></div>`).join(''):'<p class="lead">No hay boletos con ese WhatsApp. Revisa el número o aparta boletos.</p>';
       return;
     }
+    try{await loadTaken()}catch(x){}
     let n=+v;if(n>=cfg.total&&n<cfg.total*cfg.opp)n=n%cfg.total;
     if(n>=cfg.total){out.innerHTML=`<p class="lead">Los boletos van del ${pad(0)} al ${pad(cfg.total-1)}.</p>`;return}
-    const r=resMap.get(n),st=r?(r.status==='pagado'?'ok':'held'):(seeded.has(n)?'sold':'free');
-    out.innerHTML=`<div class="rcard"><b class="mono" style="font-size:22px">${pad(n)}</b> ${tagFor(st)}${cfg.opp>1?`<br><span style="color:var(--muted)">Oportunidades: ${opps(n).join(', ')}</span>`:''}${r?`<br>Folio ${r.folio}, a nombre de ${esc(r.name.split(' ')[0])}`:''}</div>`;
+    const st=paid.has(n)?'ok':held.has(n)?'held':'free';
+    out.innerHTML=`<div class="rcard"><b class="mono" style="font-size:22px">${pad(n)}</b> ${tagFor(st)}${cfg.opp>1?`<br><span style="color:var(--muted)">Oportunidades: ${opps(n).join(', ')}</span>`:''}</div>`;
   }
   $('vBtn').addEventListener('click',verify);$('vq').addEventListener('keydown',e=>{if(e.key==='Enter')verify()});
 
   function tick(){
-    let d=Math.max(0,new Date(cfg.date)-Date.now())/1000;if(isNaN(d))d=0;
+    if(!cfg)return;let d=Math.max(0,new Date(cfg.draw_at)-Date.now())/1000;if(isNaN(d))d=0;
     const D=Math.floor(d/86400);d-=D*86400;const H=Math.floor(d/3600);d-=H*3600;const M=Math.floor(d/60),S=Math.floor(d-M*60);
-    $('cd-d').textContent=String(D).padStart(2,'0');$('cd-h').textContent=String(H).padStart(2,'0');$('cd-m').textContent=String(M).padStart(2,'0');$('cd-s').textContent=String(S).padStart(2,'0');
+    const z=n=>String(n).padStart(2,'0');$('cd-d').textContent=z(D);$('cd-h').textContent=z(H);$('cd-m').textContent=z(M);$('cd-s').textContent=z(S);
   }
 
-  /* ---------- ADMIN ---------- */
-  let authed=false;try{authed=sessionStorage.getItem('rifa-auth')==='1'}catch(e){}
+  /* ---------- PANEL ---------- */
+  async function checkAdmin(){
+    const {data:{session}}=await sb.auth.getSession();
+    if(!session){isAdmin=false;return}
+    const {data,error}=await sb.rpc('is_admin');isAdmin=!error&&data===true;
+    if(!isAdmin)await sb.auth.signOut();
+  }
+  async function login(){
+    $('lErr').textContent='';const btn=$('lBtn');btn.disabled=true;
+    const {error}=await sb.auth.signInWithPassword({email:$('lEmail').value.trim(),password:$('lPass').value});
+    if(error){btn.disabled=false;$('lErr').textContent='Correo o contraseña incorrectos.';return}
+    await checkAdmin();btn.disabled=false;
+    if(!isAdmin){$('lErr').textContent='Esta cuenta no tiene acceso al panel.';return}
+    $('lPass').value='';route();
+  }
+  $('lBtn').addEventListener('click',login);$('lPass').addEventListener('keydown',e=>{if(e.key==='Enter')login()});
+  $('logout').addEventListener('click',async()=>{await sb.auth.signOut();isAdmin=false;setTimeout(route,0)});
+
   function showTab(t){
     document.querySelectorAll('[data-tab]').forEach(b=>b.setAttribute('aria-current',b.dataset.tab===t));
     document.querySelectorAll('[data-pane]').forEach(p=>p.hidden=p.dataset.pane!==t);
     ({resumen:renderSummary,sorteo:fillSorteo,fotos:renderPhotos,pagos:renderRows,cobro:fillCobro})[t]();
   }
-  document.querySelector('.adm aside').addEventListener('click',e=>{const b=e.target.closest('[data-tab]');if(b)showTab(b.dataset.tab)});
-  function login(){
-    if($('pin').value==='1234'){authed=true;try{sessionStorage.setItem('rifa-auth','1')}catch(e){}$('pin').value='';$('pinErr').textContent='';route()}
-    else $('pinErr').textContent='PIN incorrecto. En la demo es 1234.';
-  }
-  $('pinBtn').addEventListener('click',login);$('pin').addEventListener('keydown',e=>{if(e.key==='Enter')login()});
-  $('logout').addEventListener('click',()=>{authed=false;try{sessionStorage.removeItem('rifa-auth')}catch(e){}setTimeout(route,0)});
+  document.querySelector('.adm aside').addEventListener('click',async e=>{const b=e.target.closest('[data-tab]');if(!b)return;
+    if(b.dataset.tab==='resumen'||b.dataset.tab==='pagos'){try{await loadReservations()}catch(x){toast('No se pudieron cargar los apartados',1)}}
+    showTab(b.dataset.tab)});
 
+  async function loadReservations(){
+    const cutoff=new Date(Date.now()-cfg.hold_hours*3600e3).toISOString();
+    await sb.from('reservations').delete().eq('status','apartado').lt('created_at',cutoff);
+    const {data,error}=await sb.from('reservations').select('*, tickets(numero)').order('created_at',{ascending:false});
+    if(error)throw error;
+    resv=data.map(r=>({...r,price:+r.price,tickets:(r.tickets||[]).map(t=>t.numero).sort((a,b)=>a-b)}));
+  }
   function renderSummary(){
-    rebuild();const s=stats(),meta=cfg.total*cfg.price;
-    const d=new Date(cfg.date),days=Math.max(0,Math.ceil((d-Date.now())/864e5));
+    let p=0,h=0,cob=0,pend=0;
+    resv.forEach(r=>{const n=r.tickets.length;if(r.status==='pagado'){p+=n;cob+=n*r.price}else{h+=n;pend+=n*r.price}});
+    const meta=cfg.total*cfg.price,free=cfg.total-p-h;
+    const days=Math.max(0,Math.ceil((new Date(cfg.draw_at)-Date.now())/864e5));
     $('rLead').textContent=`Sorteo ${cfg.num}: ${cfg.prize}. ${cfg.active?'Venta activa':'Venta pausada'}, faltan ${days} días.`;
-    const cobrado=s.sold*cfg.price,pend=res.filter(r=>r.status==='apartado').reduce((a,r)=>a+r.tickets.length*r.price,0);
-    $('kpis').innerHTML=`<div><b>${s.sold.toLocaleString('es-MX')}</b><small>Boletos vendidos</small></div><div><b>${s.held.toLocaleString('es-MX')}</b><small>Apartados sin pagar</small></div><div><b>${s.free.toLocaleString('es-MX')}</b><small>Disponibles de ${cfg.total.toLocaleString('es-MX')}</small></div><div><b>${Math.round(s.sold/cfg.total*100)}%</b><small>Avance de venta</small></div>
-      <div><b>${money(cobrado)}</b><small>Recaudado</small></div><div><b>${money(pend)}</b><small>Por cobrar</small></div><div><b>${money(meta)}</b><small>Meta total</small></div><div><b>${res.length}</b><small>Folios registrados</small></div>`;
-    const p1=s.sold/cfg.total*100,p2=s.held/cfg.total*100;
-    $('metaBar').innerHTML=`<i style="width:${p1}%;background:var(--sel)"></i><i style="width:${p2}%;background:var(--held)"></i>`;
-    $('metaLegend').innerHTML=`<span class="l-sel">Recaudado ${money(cobrado)}</span><span class="l-held">Apartado ${money(pend)}</span><span>Faltan ${money(meta-cobrado-pend)}</span>`;
-    // daily
-    const days14=[],today=new Date();today.setHours(0,0,0,0);
-    let a=99;const r=()=>{a=(a*16807)%2147483647;return a/2147483647};
-    const w=[];for(let i=0;i<14;i++)w.push(0.5+r()+i*0.06);const ws=w.reduce((x,y)=>x+y,0);
-    for(let i=13;i>=0;i--){const day=new Date(today-i*864e5);days14.push({day,v:Math.round(s.demo*0.25*w[13-i]/ws)})}
-    res.filter(x=>x.status==='pagado').forEach(x=>{const dd=new Date(x.paidAt||x.created);dd.setHours(0,0,0,0);const it=days14.find(o=>+o.day===+dd);if(it)it.v+=x.tickets.length});
+    const f=n=>n.toLocaleString('es-MX');
+    $('kpis').innerHTML=`<div><b>${f(p)}</b><small>Boletos vendidos</small></div><div><b>${f(h)}</b><small>Apartados sin pagar</small></div><div><b>${f(free)}</b><small>Disponibles de ${f(cfg.total)}</small></div><div><b>${Math.round(p/cfg.total*100)}%</b><small>Avance de venta</small></div>
+      <div><b>${money(cob)}</b><small>Recaudado</small></div><div><b>${money(pend)}</b><small>Por cobrar</small></div><div><b>${money(meta)}</b><small>Meta aproximada</small></div><div><b>${resv.length}</b><small>Folios activos</small></div>`;
+    $('metaBar').innerHTML=`<i style="width:${Math.min(100,cob/meta*100)}%;background:var(--sel)"></i><i style="width:${Math.min(100,pend/meta*100)}%;background:var(--held)"></i>`;
+    $('metaLegend').innerHTML=`<span class="l-sel">Recaudado ${money(cob)}</span><span class="l-held">Apartado ${money(pend)}</span><span>Faltan ${money(Math.max(0,meta-cob-pend))}</span>`;
+    const today=new Date();today.setHours(0,0,0,0);const days14=[];
+    for(let i=13;i>=0;i--)days14.push({day:new Date(today-i*864e5),v:0});
+    resv.filter(r=>r.status==='pagado').forEach(r=>{const d=new Date(r.paid_at||r.created_at);d.setHours(0,0,0,0);const it=days14.find(o=>+o.day===+d);if(it)it.v+=r.tickets.length});
     const max=Math.max(1,...days14.map(o=>o.v));
     $('bars').innerHTML=days14.map(o=>`<div title="${o.v} boletos"><small>${o.v}</small><span style="height:${o.v/max*100}%"></span>${o.day.getDate()}</div>`).join('');
   }
 
   function fillSorteo(){
-    $('cActive').checked=cfg.active;$('cNum').value=cfg.num;$('cDate').value=cfg.date;$('cPrize').value=cfg.prize;$('cDesc').value=cfg.desc;
-    $('cSecond').value=cfg.second;$('cPrice').value=cfg.price;$('cTotal').value=cfg.total;$('cOpp').value=cfg.opp;$('cHold').value=cfg.hold;
-    $('cPermit').value=cfg.permit;$('cDemo').checked=cfg.demo;$('cErr').textContent='';
-    const maxT=res.reduce((m,r)=>Math.max(m,...r.tickets),-1);
-    $('cTotalHelp').textContent=maxT>=0?`Mínimo ${maxT+1}, porque ya hay boletos apartados hasta el ${pad(maxT)}.`:'Entre 100 y 100,000.';
+    $('cActive').checked=cfg.active;$('cNum').value=cfg.num;$('cDate').value=toLocalInput(cfg.draw_at);$('cPrize').value=cfg.prize;$('cDesc').value=cfg.descr;
+    $('cSecond').value=cfg.second;$('cPrice').value=cfg.price;$('cTotal').value=cfg.total;$('cOpp').value=cfg.opp;$('cHold').value=cfg.hold_hours;$('cPermit').value=cfg.permit;$('cErr').textContent='';
+    const maxT=maxTaken();
+    $('cTotalHelp').textContent=maxT>=0?`Mínimo ${maxT+1}, porque ya hay boletos ocupados hasta el ${pad(maxT)}.`:'Entre 100 y 100,000.';
   }
-  $('cSave').addEventListener('click',()=>{
-    const n={active:$('cActive').checked,num:+$('cNum').value,date:$('cDate').value,prize:$('cPrize').value.trim(),desc:$('cDesc').value.trim(),
-      second:$('cSecond').value.trim(),price:+$('cPrice').value,total:Math.round(+$('cTotal').value),opp:+$('cOpp').value,hold:+$('cHold').value,
-      permit:$('cPermit').value.trim(),demo:$('cDemo').checked};
-    const maxT=res.reduce((m,r)=>Math.max(m,...r.tickets),-1);
-    const err=!n.prize?'Escribe el nombre del premio.':!n.date?'Elige la fecha del sorteo.':!(n.price>0)?'El precio debe ser mayor a cero.':
-      !(n.total>=100&&n.total<=100000)?'La cantidad de boletos va de 100 a 100,000.':n.total<=maxT?`La cantidad debe ser al menos ${maxT+1} por los apartados existentes.`:
-      !(n.hold>=1&&n.hold<=72)?'Las horas para pagar van de 1 a 72.':!(n.num>=1)?'Escribe el número de sorteo.':'';
+  async function saveCfg(patch,errEl,btn){
+    btn.disabled=true;
+    const {data,error}=await sb.from('config').update({...patch,updated_at:new Date().toISOString()}).eq('id',1).select().single();
+    btn.disabled=false;
+    if(error){errEl.textContent='No se pudo guardar: '+error.message;return false}
+    cfg=data;cfg.price=+cfg.price;cfg.photos=cfg.photos||[];refreshPublic();toast('Cambios guardados');return true;
+  }
+  $('cSave').addEventListener('click',async()=>{
+    try{await loadTaken()}catch(x){}
+    const n={active:$('cActive').checked,num:+$('cNum').value,draw_at:$('cDate').value?new Date($('cDate').value).toISOString():'',prize:$('cPrize').value.trim(),descr:$('cDesc').value.trim(),
+      second:$('cSecond').value.trim(),price:+$('cPrice').value,total:Math.round(+$('cTotal').value),opp:+$('cOpp').value,hold_hours:Math.round(+$('cHold').value),permit:$('cPermit').value.trim()};
+    const maxT=maxTaken();
+    const err=!n.prize?'Escribe el nombre del premio.':!n.draw_at?'Elige la fecha del sorteo.':!(n.price>0)?'El precio debe ser mayor a cero.':
+      !(n.total>=100&&n.total<=100000)?'La cantidad de boletos va de 100 a 100,000.':n.total<=maxT?`La cantidad debe ser al menos ${maxT+1} por los boletos ya ocupados.`:
+      !(n.hold_hours>=1&&n.hold_hours<=72)?'Las horas para pagar van de 1 a 72.':!(n.num>=1)?'Escribe el número de sorteo.':'';
     if(err){$('cErr').textContent=err;return}
-    const reseed=n.total!==cfg.total||n.demo!==cfg.demo;
-    Object.assign(cfg,n);put(K_CFG,cfg);if(reseed){seed();selected.clear()}
-    rebuild();refreshPublic();fillSorteo();toast('Cambios guardados');
+    $('cErr').textContent='';if(await saveCfg(n,$('cErr'),$('cSave')))fillSorteo();
   });
-
   function fillCobro(){$('kBank').value=cfg.bank;$('kClabe').value=cfg.clabe;$('kOwner').value=cfg.owner;$('kWa').value=cfg.wa;$('kErr').textContent=''}
   $('kSave').addEventListener('click',()=>{
-    const wa=$('kWa').value.replace(/\D/g,'');
-    if(wa.length!==10){$('kErr').textContent='El WhatsApp debe tener 10 dígitos.';return}
-    Object.assign(cfg,{bank:$('kBank').value.trim(),clabe:$('kClabe').value.trim(),owner:$('kOwner').value.trim(),wa});
-    put(K_CFG,cfg);$('kErr').textContent='';toast('Cambios guardados');
+    const wa=$('kWa').value.replace(/\D/g,'');if(wa.length!==10){$('kErr').textContent='El WhatsApp debe tener 10 dígitos.';return}
+    $('kErr').textContent='';saveCfg({bank:$('kBank').value.trim(),clabe:$('kClabe').value.trim(),owner:$('kOwner').value.trim(),wa},$('kErr'),$('kSave'));
   });
 
   function renderPhotos(){
-    $('photos').innerHTML=photos.map((p,i)=>`<div class="photo"><img src="${p}" alt="Foto ${i+1}"><div class="row">${i===0?'<span class="tag t-ok">Principal</span>':`<button class="btn btn-line" data-main="${i}">Hacer principal</button>`}<button class="btn btn-red" data-del="${i}">Quitar</button></div></div>`).join('');
+    $('photos').innerHTML=cfg.photos.map((p,i)=>`<div class="photo"><img src="${esc(p)}" alt="Foto ${i+1}"><div class="row">${i===0?'<span class="tag t-ok">Principal</span>':`<button class="btn btn-line" data-main="${i}">Hacer principal</button>`}<button class="btn btn-red" data-del="${i}">Quitar</button></div></div>`).join('');
   }
-  function readImg(file){return new Promise((ok,ko)=>{const fr=new FileReader();fr.onload=()=>{const img=new Image();img.onload=()=>{
-    const max=1280,s=Math.min(1,max/Math.max(img.width,img.height)),c=document.createElement('canvas');
-    c.width=Math.round(img.width*s);c.height=Math.round(img.height*s);c.getContext('2d').drawImage(img,0,0,c.width,c.height);ok(c.toDataURL('image/jpeg',0.72))};
-    img.onerror=ko;img.src=fr.result};fr.onerror=ko;fr.readAsDataURL(file)})}
+  function toBlob(file){return new Promise((ok,ko)=>{const fr=new FileReader();fr.onload=()=>{const img=new Image();img.onload=()=>{
+    const s=Math.min(1,1600/Math.max(img.width,img.height)),c=document.createElement('canvas');c.width=Math.round(img.width*s);c.height=Math.round(img.height*s);
+    c.getContext('2d').drawImage(img,0,0,c.width,c.height);c.toBlob(b=>b?ok(b):ko(new Error('blob')),'image/jpeg',0.8)};img.onerror=ko;img.src=fr.result};fr.onerror=ko;fr.readAsDataURL(file)})}
   $('fileIn').addEventListener('change',async e=>{
     $('fErr').textContent='';const files=[...e.target.files].filter(f=>f.type.startsWith('image/'));e.target.value='';
+    const photos=[...cfg.photos];$('dropTxt').textContent='Subiendo…';
     for(const f of files){
       if(photos.length>=6){$('fErr').textContent='Ya tienes 6 fotos. Quita una para subir otra.';break}
-      try{const d=await readImg(f);photos.push(d);if(!put(K_PH,photos)){photos.pop();$('fErr').textContent='No hay espacio en la demo para otra foto. Quita una e inténtalo de nuevo.';break}}
-      catch(x){$('fErr').textContent=`No se pudo leer ${f.name}. Usa JPG o PNG.`}
+      try{
+        const blob=await toBlob(f),path=`foto-${Date.now()}-${Math.random().toString(36).slice(2,7)}.jpg`;
+        const {error}=await sb.storage.from(BUCKET).upload(path,blob,{contentType:'image/jpeg'});if(error)throw error;
+        photos.push(sb.storage.from(BUCKET).getPublicUrl(path).data.publicUrl);
+      }catch(x){$('fErr').textContent=`No se pudo subir ${f.name}.`}
     }
-    renderPhotos();renderHero();
+    $('dropTxt').textContent='JPG o PNG desde tu computadora o celular';
+    if(photos.length!==cfg.photos.length)await saveCfg({photos},$('fErr'),{set disabled(v){}});
+    renderPhotos();
   });
-  $('photos').addEventListener('click',e=>{
-    const m=e.target.closest('[data-main]'),d=e.target.closest('[data-del]');
-    if(m){const i=+m.dataset.main;photos.unshift(photos.splice(i,1)[0])}else if(d){photos.splice(+d.dataset.del,1)}else return;
-    put(K_PH,photos);photoIdx=0;renderPhotos();renderHero();
+  $('photos').addEventListener('click',async e=>{
+    const m=e.target.closest('[data-main]'),d=e.target.closest('[data-del]');if(!m&&!d)return;
+    const photos=[...cfg.photos];
+    if(m){const i=+m.dataset.main;photos.unshift(photos.splice(i,1)[0])}
+    else{const url=photos.splice(+d.dataset.del,1)[0];const path=url.split(`/${BUCKET}/`)[1];if(path)await sb.storage.from(BUCKET).remove([decodeURIComponent(path)])}
+    photoIdx=0;await saveCfg({photos},$('fErr'),{set disabled(v){}});renderPhotos();
   });
 
   function renderRows(){
-    rebuild();const q=$('pQ').value.trim().toLowerCase(),f=$('pF').value;
-    const list=[...res].sort((a,b)=>b.created-a.created).filter(r=>(f==='all'||r.status===f)&&(!q||[r.folio,r.name,r.phone,...r.tickets.map(t=>pad(t))].join(' ').toLowerCase().includes(q)));
+    const q=$('pQ').value.trim().toLowerCase(),f=$('pF').value;
+    const list=resv.filter(r=>(f==='all'||r.status===f)&&(!q||[r.folio,r.name,r.phone,...r.tickets.map(t=>pad(t))].join(' ').toLowerCase().includes(q)));
     $('rows').innerHTML=list.map(r=>{
-      const ven=r.status==='apartado'?Math.max(0,Math.round((r.created+cfg.hold*3600e3-Date.now())/36e5))+' h':'—';
-      const msg=encodeURIComponent(`Hola ${r.name.split(' ')[0]}, te escribimos de Rifas Bestiarium sobre tu folio ${r.folio}.`);
-      return `<tr><td class="mono">${r.folio}</td><td>${new Date(r.created).toLocaleDateString('es-MX',{day:'2-digit',month:'short'})}</td><td>${esc(r.name)}</td><td>${r.phone}</td><td>${tagFor(r.status==='pagado'?'ok':'held')}</td><td title="${r.tickets.map(t=>pad(t)).join(', ')}">${r.tickets.length}</td><td>${money(r.tickets.length*r.price)}</td><td>${ven}</td>
-      <td>${r.status==='apartado'?`<button class="btn btn-gold" data-pay="${r.folio}">Marcar pagado</button> `:''}<a class="btn btn-line" target="_blank" rel="noopener" href="https://wa.me/52${r.phone}?text=${msg}">WhatsApp</a> <button class="btn btn-red" data-free="${r.folio}">Liberar</button></td></tr>`}).join('');
+      const ven=r.status==='apartado'?Math.max(0,Math.round((new Date(r.created_at).getTime()+cfg.hold_hours*3600e3-Date.now())/36e5))+' h':'—';
+      const msg=encodeURIComponent(`Hola ${r.name.split(' ')[0]}, te escribimos de ${BRAND} sobre tu folio ${r.folio}.`);
+      return `<tr><td class="mono">${esc(r.folio)}</td><td>${new Date(r.created_at).toLocaleDateString('es-MX',{day:'2-digit',month:'short'})}</td><td>${esc(r.name)}</td><td>${esc(r.phone)}</td><td>${tagFor(r.status==='pagado'?'ok':'held')}</td><td title="${r.tickets.map(t=>pad(t)).join(', ')}">${r.tickets.length}</td><td>${money(r.tickets.length*r.price)}</td><td>${ven}</td>
+      <td>${r.status==='apartado'?`<button class="btn btn-gold" data-pay="${esc(r.folio)}">Marcar pagado</button> `:''}<a class="btn btn-line" target="_blank" rel="noopener" href="https://wa.me/52${esc(r.phone)}?text=${msg}">WhatsApp</a> <button class="btn btn-red" data-free="${esc(r.folio)}">Liberar</button></td></tr>`}).join('');
     $('emptyRows').hidden=list.length>0;
   }
   $('pQ').addEventListener('input',renderRows);$('pF').addEventListener('change',renderRows);
-  $('rows').addEventListener('click',e=>{
-    const p=e.target.closest('[data-pay]'),f=e.target.closest('[data-free]');
-    if(p){const r=res.find(x=>x.folio===p.dataset.pay);if(r){r.status='pagado';r.paidAt=Date.now()}toast('Pago registrado')}
-    else if(f){if(!confirm('¿Liberar estos boletos? Volverán a estar disponibles.'))return;res=res.filter(x=>x.folio!==f.dataset.free);toast('Boletos liberados')}
-    else return;
-    put(K_RES,res);rebuild();renderRows();refreshPublic();
+  $('pRefresh').addEventListener('click',async()=>{try{await loadReservations();renderRows();toast('Actualizado')}catch(x){toast('No se pudo actualizar',1)}});
+  $('rows').addEventListener('click',async e=>{
+    const p=e.target.closest('[data-pay]'),f=e.target.closest('[data-free]');if(!p&&!f)return;
+    let error;
+    if(p)({error}=await sb.from('reservations').update({status:'pagado',paid_at:new Date().toISOString()}).eq('folio',p.dataset.pay));
+    else{if(!confirm('¿Liberar estos boletos? Volverán a estar disponibles.'))return;({error}=await sb.from('reservations').delete().eq('folio',f.dataset.free))}
+    if(error){toast('No se pudo guardar el cambio',1);return}
+    toast(p?'Pago registrado':'Boletos liberados');
+    try{await loadReservations();await loadTaken()}catch(x){}renderRows();renderProgress();
   });
-  $('resetDemo').addEventListener('click',()=>{if(!confirm('¿Borrar todos los apartados de la demo?'))return;res=[];put(K_RES,res);rebuild();renderRows();refreshPublic();toast('Apartados borrados')});
 
   function refreshPublic(){renderHero();renderPages();renderGrid();updateCart();tick()}
 
-  function route(){
+  async function route(){
     const adm=location.hash==='#admin';
     $('pub').hidden=adm;$('adm').hidden=!adm;$('navPub').hidden=adm;$('navAdm').hidden=!adm;
-    if(adm){$('login').hidden=authed;$('admBody').hidden=!authed;$('logout').hidden=!authed;
-      if(authed)showTab(document.querySelector('[data-tab][aria-current="true"]').dataset.tab);else setTimeout(()=>$('pin').focus(),0);
-      window.scrollTo(0,0)}
-    else refreshPublic();
+    if(adm){
+      await checkAdmin();
+      $('login').hidden=isAdmin;$('admBody').hidden=!isAdmin;$('logout').hidden=!isAdmin;
+      if(isAdmin){try{await loadReservations();await loadTaken()}catch(x){toast('No se pudieron cargar los datos',1)}
+        showTab(document.querySelector('[data-tab][aria-current="true"]').dataset.tab)}
+      else setTimeout(()=>$('lEmail').focus(),0);
+      window.scrollTo(0,0);
+    }else refreshPublic();
   }
   addEventListener('hashchange',route);
 
-  seed();rebuild();route();setInterval(tick,1000);
+  (async()=>{
+    try{await loadConfig();await loadTaken()}
+    catch(e){$('loading').textContent='No se pudo conectar con la base de datos. Revisa la URL, la llave y que hayas corrido el script SQL.';return}
+    $('loading').hidden=true;route();setInterval(tick,1000);
+    setInterval(async()=>{if(location.hash==='#admin'||document.hidden)return;try{await loadTaken();renderGrid();renderProgress()}catch(x){}},30000);
+  })();
 })();
 </script>
 </body>
